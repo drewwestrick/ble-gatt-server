@@ -379,19 +379,19 @@ Server::Server(const std::string &serviceName, const std::string &advertisingNam
 		.gattCharacteristicEnd()
 	.gattServiceEnd()
 
-	// Custom read/write text string service (00000001-1E3C-FAD4-74E2-97A033F1BFAA)
+	// Custom read/write text string service (00000001-4CEA-45F0-815C-E998A75BBDC6)
 	//
 	// This service will return a text string value (default: 'Hello, world!'). If the text value is updated, it will notify
 	// that the value has been updated and provide the new text from that point forward.
-	.gattServiceBegin("text", "00000001-1E3C-FAD4-74E2-97A033F1BFAA")
+	.gattServiceBegin("wifi", "00000001-4CEA-45F0-815C-E998A75BBDC6")
 
-		// Characteristic: String value (custom: 00000002-1E3C-FAD4-74E2-97A033F1BFAA)
-		.gattCharacteristicBegin("string", "00000002-1E3C-FAD4-74E2-97A033F1BFAA", {"read", "write", "notify"})
+		// Characteristic: ssid value (custom: 00000002-4CEA-45F0-815C-E998A75BBDC6)
+		.gattCharacteristicBegin("ssid", "00000002-4CEA-45F0-815C-E998A75BBDC6", {"read", "write", "notify"})
 
 			// Standard characteristic "ReadValue" method call
 			.onReadValue(CHARACTERISTIC_METHOD_CALLBACK_LAMBDA
 			{
-				const char *pTextString = self.getDataPointer<const char *>("text/string", "");
+				const char *pTextString = self.getDataPointer<const char *>("wifi/ssid", "");
 				self.methodReturnValue(pInvocation, pTextString, true);
 			})
 
@@ -400,7 +400,7 @@ Server::Server(const std::string &serviceName, const std::string &advertisingNam
 			{
 				// Update the text string value
 				GVariant *pAyBuffer = g_variant_get_child_value(pParameters, 0);
-				self.setDataPointer("text/string", Utils::stringFromGVariantByteArray(pAyBuffer).c_str());
+				self.setDataPointer("wifi/ssid", Utils::stringFromGVariantByteArray(pAyBuffer).c_str());
 
 				// Since all of these methods (onReadValue, onWriteValue, onUpdateValue) are all part of the same
 				// Characteristic interface (which just so happens to be the same interface passed into our self
@@ -419,7 +419,7 @@ Server::Server(const std::string &serviceName, const std::string &advertisingNam
 			// We can handle updates in any way we wish, but the most common use is to send a change notification.
 			.onUpdatedValue(CHARACTERISTIC_UPDATED_VALUE_CALLBACK_LAMBDA
 			{
-				const char *pTextString = self.getDataPointer<const char *>("text/string", "");
+				const char *pTextString = self.getDataPointer<const char *>("wifi/ssid", "");
 				self.sendChangeNotificationValue(pConnection, pTextString);
 				return true;
 			})
@@ -432,35 +432,51 @@ Server::Server(const std::string &serviceName, const std::string &advertisingNam
 				// Standard descriptor "ReadValue" method call
 				.onReadValue(DESCRIPTOR_METHOD_CALLBACK_LAMBDA
 				{
-					const char *pDescription = "A mutable text string used for testing. Read and write to me, it tickles!";
+					const char *pDescription = "SSID";
 					self.methodReturnValue(pInvocation, pDescription, true);
 				})
 
 			.gattDescriptorEnd()
 
 		.gattCharacteristicEnd()
-	.gattServiceEnd()
 
-	// Custom ASCII time string service
-	//
-	// This service will simply return the result of asctime() of the current local time. It's a nice test service to provide
-	// a new value each time it is read.
-
-	// Service: ASCII Time (custom: 00000001-1E3D-FAD4-74E2-97A033F1BFEE)
-	.gattServiceBegin("ascii_time", "00000001-1E3D-FAD4-74E2-97A033F1BFEE")
-
-		// Characteristic: ASCII Time String (custom: 00000002-1E3D-FAD4-74E2-97A033F1BFEE)
-		.gattCharacteristicBegin("string", "00000002-1E3D-FAD4-74E2-97A033F1BFEE", {"read"})
+		// Characteristic: passphrase (custom: 00000003-4CEA-45F0-815C-E998A75BBDC6)
+		.gattCharacteristicBegin("passphrase", "00000003-4CEA-45F0-815C-E998A75BBDC6", {"read", "write", "notify"})
 
 			// Standard characteristic "ReadValue" method call
 			.onReadValue(CHARACTERISTIC_METHOD_CALLBACK_LAMBDA
 			{
-				// Get our local time string using asctime()
-				time_t timeVal = time(nullptr);
-				struct tm *pTimeStruct = localtime(&timeVal);
-				std::string timeString = Utils::trim(asctime(pTimeStruct));
+				const char *pTextString = self.getDataPointer<const char *>("wifi/passphrase", "");
+				self.methodReturnValue(pInvocation, pTextString, true);
+			})
 
-				self.methodReturnValue(pInvocation, timeString, true);
+			// Standard characteristic "WriteValue" method call
+			.onWriteValue(CHARACTERISTIC_METHOD_CALLBACK_LAMBDA
+			{
+				// Update the wifi passphrase value
+				GVariant *pAyBuffer = g_variant_get_child_value(pParameters, 0);
+				self.setDataPointer("wifi/passphrase", Utils::stringFromGVariantByteArray(pAyBuffer).c_str());
+
+				// Since all of these methods (onReadValue, onWriteValue, onUpdateValue) are all part of the same
+				// Characteristic interface (which just so happens to be the same interface passed into our self
+				// parameter) we can that parameter to call our own onUpdatedValue method
+				self.callOnUpdatedValue(pConnection, pUserData);
+
+				// Note: Even though the WriteValue method returns void, it's important to return like this, so that a
+				// dbus "method_return" is sent, otherwise the client gets an error (ATT error code 0x0e"unlikely").
+				// Only "write-without-response" works without this
+				self.methodReturnVariant(pInvocation, NULL);
+			})
+
+			// Here we use the onUpdatedValue to set a callback that isn't exposed to BlueZ, but rather allows us to manage
+			// updates to our value. These updates may have come from our own server or some other source.
+			//
+			// We can handle updates in any way we wish, but the most common use is to send a change notification.
+			.onUpdatedValue(CHARACTERISTIC_UPDATED_VALUE_CALLBACK_LAMBDA
+			{
+				const char *pTextString = self.getDataPointer<const char *>("wifi/passphrase", "");
+				self.sendChangeNotificationValue(pConnection, pTextString);
+				return true;
 			})
 
 			// GATT Descriptor: Characteristic User Description (0x2901)
@@ -471,32 +487,51 @@ Server::Server(const std::string &serviceName, const std::string &advertisingNam
 				// Standard descriptor "ReadValue" method call
 				.onReadValue(DESCRIPTOR_METHOD_CALLBACK_LAMBDA
 				{
-					const char *pDescription = "Returns the local time (as reported by POSIX asctime()) each time it is read";
+					const char *pDescription = "Passphrase";
 					self.methodReturnValue(pInvocation, pDescription, true);
 				})
 
 			.gattDescriptorEnd()
 
 		.gattCharacteristicEnd()
-	.gattServiceEnd()
 
-	// Custom CPU information service (custom: 0000B001-1E3D-FAD4-74E2-97A033F1BFEE)
-	//
-	// This is a cheezy little service that reads the CPU info from /proc/cpuinfo and returns the count and model of the
-	// CPU. It may not work on all platforms, but it does provide yet another example of how to do things.
-
-	// Service: CPU Information (custom: 0000B001-1E3D-FAD4-74E2-97A033F1BFEE)
-	.gattServiceBegin("cpu", "0000B001-1E3D-FAD4-74E2-97A033F1BFEE")
-
-		// Characteristic: CPU Count (custom: 0000B002-1E3D-FAD4-74E2-97A033F1BFEE)
-		.gattCharacteristicBegin("count", "0000B002-1E3D-FAD4-74E2-97A033F1BFEE", {"read"})
+		// Characteristic: update (custom: 00000004-4CEA-45F0-815C-E998A75BBDC6)
+		.gattCharacteristicBegin("update", "00000004-4CEA-45F0-815C-E998A75BBDC6", {"read", "write", "notify"})
 
 			// Standard characteristic "ReadValue" method call
 			.onReadValue(CHARACTERISTIC_METHOD_CALLBACK_LAMBDA
 			{
-				int16_t cpuCount = 0;
-				ServerUtils::getCpuInfo(cpuCount);
-				self.methodReturnValue(pInvocation, cpuCount, true);
+				uint8_t batteryLevel = self.getDataValue<uint8_t>("wifi/update", 0);
+				self.methodReturnValue(pInvocation, batteryLevel, true);
+			})
+
+			// Standard characteristic "WriteValue" method call
+			.onWriteValue(CHARACTERISTIC_METHOD_CALLBACK_LAMBDA
+			{
+				// Update the wifi passphrase value
+				GVariant *pAyBuffer = g_variant_get_child_value(pParameters, 0);
+				self.setDataPointer("wifi/update", Utils::stringFromGVariantByteArray(pAyBuffer).c_str());
+
+				// Since all of these methods (onReadValue, onWriteValue, onUpdateValue) are all part of the same
+				// Characteristic interface (which just so happens to be the same interface passed into our self
+				// parameter) we can that parameter to call our own onUpdatedValue method
+				self.callOnUpdatedValue(pConnection, pUserData);
+
+				// Note: Even though the WriteValue method returns void, it's important to return like this, so that a
+				// dbus "method_return" is sent, otherwise the client gets an error (ATT error code 0x0e"unlikely").
+				// Only "write-without-response" works without this
+				self.methodReturnVariant(pInvocation, NULL);
+			})
+
+			// Here we use the onUpdatedValue to set a callback that isn't exposed to BlueZ, but rather allows us to manage
+			// updates to our value. These updates may have come from our own server or some other source.
+			//
+			// We can handle updates in any way we wish, but the most common use is to send a change notification.
+			.onUpdatedValue(CHARACTERISTIC_UPDATED_VALUE_CALLBACK_LAMBDA
+			{
+				uint8_t update = self.getDataValue<uint8_t>("wifi/update", 0);
+				self.sendChangeNotificationValue(pConnection, update);
+				return true;
 			})
 
 			// GATT Descriptor: Characteristic User Description (0x2901)
@@ -507,33 +542,7 @@ Server::Server(const std::string &serviceName, const std::string &advertisingNam
 				// Standard descriptor "ReadValue" method call
 				.onReadValue(DESCRIPTOR_METHOD_CALLBACK_LAMBDA
 				{
-					const char *pDescription = "This might represent the number of CPUs in the system";
-					self.methodReturnValue(pInvocation, pDescription, true);
-				})
-
-			.gattDescriptorEnd()
-
-		.gattCharacteristicEnd()
-
-		// Characteristic: CPU Model (custom: 0000B003-1E3D-FAD4-74E2-97A033F1BFEE)
-		.gattCharacteristicBegin("model", "0000B003-1E3D-FAD4-74E2-97A033F1BFEE", {"read"})
-
-			// Standard characteristic "ReadValue" method call
-			.onReadValue(CHARACTERISTIC_METHOD_CALLBACK_LAMBDA
-			{
-				int16_t cpuCount = 0;
-				self.methodReturnValue(pInvocation, ServerUtils::getCpuInfo(cpuCount), true);
-			})
-
-			// GATT Descriptor: Characteristic User Description (0x2901)
-			// 
-			// See: https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.descriptor.gatt.characteristic_user_description.xml
-			.gattDescriptorBegin("description", "2901", {"read"})
-
-				// Standard descriptor "ReadValue" method call
-				.onReadValue(DESCRIPTOR_METHOD_CALLBACK_LAMBDA
-				{
-					const char *pDescription = "Possibly the model of the CPU in the system";
+					const char *pDescription = "Trigger Update";
 					self.methodReturnValue(pInvocation, pDescription, true);
 				})
 

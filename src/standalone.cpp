@@ -123,8 +123,14 @@ static const int kMaxAsyncInitTimeoutMS = 30 * 1000;
 // The battery level ("battery/level") reported by the server (see Server.cpp)
 static uint8_t serverDataBatteryLevel = 78;
 
-// The text string ("text/string") used by our custom text string service (see Server.cpp)
-static std::string serverDataTextString = "Hello, world!";
+// The wifi ssid ("wifi/ssid") used by our custom text string service (see Server.cpp)
+static std::string serverDataSSIDString = "Glassboard";
+
+// The wifi passphrse ("wifi/ssid") used by our custom text string service (see Server.cpp)
+static std::string serverDataPassphraseString;
+
+// The update trigger ("battery/level") reported by the server (see Server.cpp)
+static uint8_t serverDataUpdate = 0;
 
 //
 // Logging
@@ -197,10 +203,19 @@ const void *dataGetter(const char *pName)
 	{
 		return &serverDataBatteryLevel;
 	}
-	else if (strName == "text/string")
+	else if (strName == "wifi/ssid")
 	{
-		return serverDataTextString.c_str();
+		return serverDataSSIDString.c_str();
 	}
+    else if (strName == "wifi/passphrase")
+	{
+		return serverDataPassphraseString.c_str();
+	}
+    else if (strName == "wifi/update")
+	{
+		return &serverDataUpdate;
+	}
+    
 
 	LogWarn((std::string("Unknown name for server data getter request: '") + pName + "'").c_str());
 	return nullptr;
@@ -233,10 +248,27 @@ int dataSetter(const char *pName, const void *pData)
 		LogDebug((std::string("Server data: battery level set to ") + std::to_string(serverDataBatteryLevel)).c_str());
 		return 1;
 	}
-	else if (strName == "text/string")
+	else if (strName == "wifi/ssid")
 	{
-		serverDataTextString = static_cast<const char *>(pData);
-		LogDebug((std::string("Server data: text string set to '") + serverDataTextString + "'").c_str());
+		serverDataSSIDString = static_cast<const char *>(pData);
+		LogInfo((std::string("Server data: ssid set to '") + serverDataSSIDString + "'").c_str());
+		return 1;
+	}
+    else if (strName == "wifi/passphrase")
+	{
+		serverDataPassphraseString = static_cast<const char *>(pData);
+		LogInfo((std::string("Server data: passphrase set to '") + serverDataPassphraseString + "'").c_str());
+		return 1;
+	}
+    else if (strName == "wifi/update")
+	{
+        if (*static_cast<const uint8_t *>(pData) == 1) {
+            serverDataUpdate = 2;
+        }
+        else {
+            serverDataUpdate = 0;
+        }
+		LogDebug((std::string("Server data: update set to ") + std::to_string(serverDataUpdate)).c_str());
 		return 1;
 	}
 
@@ -312,7 +344,7 @@ int main(int argc, char **ppArgv)
 		std::this_thread::sleep_for(std::chrono::seconds(15));
 
 		serverDataBatteryLevel = std::max(serverDataBatteryLevel - 1, 0);
-		ggkNofifyUpdatedCharacteristic("/com/gobbledegook/battery/level");
+		// ggkNofifyUpdatedCharacteristic("/com/gobbledegook/battery/level");
 	}
 
 	// Wait for the server to come to a complete stop (CTRL-C from the command line)
