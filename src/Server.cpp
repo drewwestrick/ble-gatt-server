@@ -259,32 +259,59 @@ Server::Server(const std::string &serviceName, const std::string &advertisingNam
 	objects.back()
 
 	// Service: Device Information (0x180A)
-	//
-	// See: https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.service.device_information.xml
 	.gattServiceBegin("device", "180A")
 
 		// Characteristic: Manufacturer Name String (0x2A29)
-		//
-		// See: https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.characteristic.manufacturer_name_string.xml
 		.gattCharacteristicBegin("mfgr_name", "2A29", {"read"})
 
 			// Standard characteristic "ReadValue" method call
 			.onReadValue(CHARACTERISTIC_METHOD_CALLBACK_LAMBDA
 			{
-				self.methodReturnValue(pInvocation, "Acme Inc.", true);
+				self.methodReturnValue(pInvocation, "Insects Limited Inc", true);
 			})
 
 		.gattCharacteristicEnd()
 
 		// Characteristic: Model Number String (0x2A24)
-		//
-		// See: https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.characteristic.model_number_string.xml
 		.gattCharacteristicBegin("model_num", "2A24", {"read"})
 
 			// Standard characteristic "ReadValue" method call
 			.onReadValue(CHARACTERISTIC_METHOD_CALLBACK_LAMBDA
 			{
-				self.methodReturnValue(pInvocation, "Marvin-PA", true);
+				self.methodReturnValue(pInvocation, "SightTrap", true);
+			})
+
+		.gattCharacteristicEnd()
+
+		// Characteristic: Hardware Revision String (0x2A27)
+		.gattCharacteristicBegin("hw_rev", "2A27", {"read"})
+
+			// Standard characteristic "ReadValue" method call
+			.onReadValue(CHARACTERISTIC_METHOD_CALLBACK_LAMBDA
+			{
+				self.methodReturnValue(pInvocation, "Rev A", true);
+			})
+
+		.gattCharacteristicEnd()
+
+		// Characteristic: Firmware Revision String (0x2A26)
+		.gattCharacteristicBegin("fw_rev", "2A26", {"read"})
+
+			// Standard characteristic "ReadValue" method call
+			.onReadValue(CHARACTERISTIC_METHOD_CALLBACK_LAMBDA
+			{
+				self.methodReturnValue(pInvocation, "1.0", true);
+			})
+
+		.gattCharacteristicEnd()
+
+		// Characteristic: Serial Number String (0x2A25)
+		.gattCharacteristicBegin("serial_num", "2A25", {"read"})
+
+			// Standard characteristic "ReadValue" method call
+			.onReadValue(CHARACTERISTIC_METHOD_CALLBACK_LAMBDA
+			{
+				self.methodReturnValue(pInvocation, "F8:F0:05:C0:39:AE", true);
 			})
 
 		.gattCharacteristicEnd()
@@ -295,8 +322,6 @@ Server::Server(const std::string &serviceName, const std::string &advertisingNam
 	//
 	// This is a fake battery service that conforms to org.bluetooth.service.battery_service. For details, see:
 	//
-	//     https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.service.battery_service.xml
-	//
 	// We also handle updates to the battery level from inside the server (see onUpdatedValue). There is an external method
 	// (see main.cpp) that updates our battery level and posts an update using ggkPushUpdateQueue. Those updates are used
 	// to notify us that our value has changed, which translates into a call to `onUpdatedValue` from the idleFunc (see
@@ -304,8 +329,6 @@ Server::Server(const std::string &serviceName, const std::string &advertisingNam
 	.gattServiceBegin("battery", "180F")
 
 		// Characteristic: Battery Level (0x2A19)
-		//
-		// See: https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.characteristic.battery_level.xml
 		.gattCharacteristicBegin("level", "2A19", {"read", "notify"})
 
 			// Standard characteristic "ReadValue" method call
@@ -335,8 +358,6 @@ Server::Server(const std::string &serviceName, const std::string &advertisingNam
 	//
 	// This is a time service that conforms to org.bluetooth.service.current_time. For details, see:
 	//
-	//    https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.service.current_time.xml
-	//
 	// Like the battery service, this also makes use of events. This one updates the time every tick.
 	//
 	// This showcases the use of events (see the call to .onEvent() below) for periodic actions. In this case, the action
@@ -345,8 +366,6 @@ Server::Server(const std::string &serviceName, const std::string &advertisingNam
 	.gattServiceBegin("time", "1805")
 
 		// Characteristic: Current Time (0x2A2B)
-		//
-		// See: https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.characteristic.current_time.xml
 		.gattCharacteristicBegin("current", "2A2B", {"read", "notify"})
 
 			// Standard characteristic "ReadValue" method call
@@ -366,8 +385,6 @@ Server::Server(const std::string &serviceName, const std::string &advertisingNam
 		.gattCharacteristicEnd()
 
 		// Characteristic: Local Time Information (0x2A0F)
-		//
-		// See: https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.characteristic.local_time_information.xml
 		.gattCharacteristicBegin("local", "2A0F", {"read"})
 
 			// Standard characteristic "ReadValue" method call
@@ -379,10 +396,7 @@ Server::Server(const std::string &serviceName, const std::string &advertisingNam
 		.gattCharacteristicEnd()
 	.gattServiceEnd()
 
-	// Custom read/write text string service (00000001-4CEA-45F0-815C-E998A75BBDC6)
-	//
-	// This service will return a text string value (default: 'Hello, world!'). If the text value is updated, it will notify
-	// that the value has been updated and provide the new text from that point forward.
+	// Custom read/write wifi service (00000001-4CEA-45F0-815C-E998A75BBDC6)
 	.gattServiceBegin("wifi", "00000001-4CEA-45F0-815C-E998A75BBDC6")
 
 		// Characteristic: ssid value (custom: 00000002-4CEA-45F0-815C-E998A75BBDC6)
@@ -407,10 +421,14 @@ Server::Server(const std::string &serviceName, const std::string &advertisingNam
 				// parameter) we can that parameter to call our own onUpdatedValue method
 				self.callOnUpdatedValue(pConnection, pUserData);
 
+
 				// Note: Even though the WriteValue method returns void, it's important to return like this, so that a
 				// dbus "method_return" is sent, otherwise the client gets an error (ATT error code 0x0e"unlikely").
 				// Only "write-without-response" works without this
 				self.methodReturnVariant(pInvocation, NULL);
+
+				// Send update notification to connected ssid
+				ggkNofifyUpdatedCharacteristic("/com/il/wifi/connected_ssid");
 			})
 
 			// Here we use the onUpdatedValue to set a callback that isn't exposed to BlueZ, but rather allows us to manage
@@ -425,8 +443,6 @@ Server::Server(const std::string &serviceName, const std::string &advertisingNam
 			})
 
 			// GATT Descriptor: Characteristic User Description (0x2901)
-			// 
-			// See: https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.descriptor.gatt.characteristic_user_description.xml
 			.gattDescriptorBegin("description", "2901", {"read"})
 
 				// Standard descriptor "ReadValue" method call
@@ -480,8 +496,6 @@ Server::Server(const std::string &serviceName, const std::string &advertisingNam
 			})
 
 			// GATT Descriptor: Characteristic User Description (0x2901)
-			// 
-			// See: https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.descriptor.gatt.characteristic_user_description.xml
 			.gattDescriptorBegin("description", "2901", {"read"})
 
 				// Standard descriptor "ReadValue" method call
@@ -501,8 +515,8 @@ Server::Server(const std::string &serviceName, const std::string &advertisingNam
 			// Standard characteristic "ReadValue" method call
 			.onReadValue(CHARACTERISTIC_METHOD_CALLBACK_LAMBDA
 			{
-				uint8_t batteryLevel = self.getDataValue<uint8_t>("wifi/update", 0);
-				self.methodReturnValue(pInvocation, batteryLevel, true);
+				uint8_t update = self.getDataValue<uint8_t>("wifi/update", 0);
+				self.methodReturnValue(pInvocation, update, true);
 			})
 
 			// Standard characteristic "WriteValue" method call
@@ -535,14 +549,82 @@ Server::Server(const std::string &serviceName, const std::string &advertisingNam
 			})
 
 			// GATT Descriptor: Characteristic User Description (0x2901)
-			// 
-			// See: https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.descriptor.gatt.characteristic_user_description.xml
 			.gattDescriptorBegin("description", "2901", {"read"})
 
 				// Standard descriptor "ReadValue" method call
 				.onReadValue(DESCRIPTOR_METHOD_CALLBACK_LAMBDA
 				{
 					const char *pDescription = "Trigger Update";
+					self.methodReturnValue(pInvocation, pDescription, true);
+				})
+
+			.gattDescriptorEnd()
+
+		.gattCharacteristicEnd()
+
+		// Characteristic: connected ssid value (custom: 00000005-4CEA-45F0-815C-E998A75BBDC6)
+		.gattCharacteristicBegin("connected_ssid", "00000005-4CEA-45F0-815C-E998A75BBDC6", {"read", "notify"})
+
+			// Standard characteristic "ReadValue" method call
+			.onReadValue(CHARACTERISTIC_METHOD_CALLBACK_LAMBDA
+			{
+				const char *pTextString = self.getDataPointer<const char *>("wifi/connected_ssid", "");
+				self.methodReturnValue(pInvocation, pTextString, true);
+			})
+
+			// Here we use the onUpdatedValue to set a callback that isn't exposed to BlueZ, but rather allows us to manage
+			// updates to our value. These updates may have come from our own server or some other source.
+			//
+			// We can handle updates in any way we wish, but the most common use is to send a change notification.
+			.onUpdatedValue(CHARACTERISTIC_UPDATED_VALUE_CALLBACK_LAMBDA
+			{
+				const char *pTextString = self.getDataPointer<const char *>("wifi/connected_ssid", "");
+				self.sendChangeNotificationValue(pConnection, pTextString);
+				return true;
+			})
+
+			// GATT Descriptor: Characteristic User Description (0x2901)
+			.gattDescriptorBegin("description", "2901", {"read"})
+
+				// Standard descriptor "ReadValue" method call
+				.onReadValue(DESCRIPTOR_METHOD_CALLBACK_LAMBDA
+				{
+					const char *pDescription = "Connected SSID";
+					self.methodReturnValue(pInvocation, pDescription, true);
+				})
+
+			.gattDescriptorEnd()
+
+		.gattCharacteristicEnd()
+
+		// Characteristic: current ip address value (custom: 00000006-4CEA-45F0-815C-E998A75BBDC6)
+		.gattCharacteristicBegin("ip_address", "00000006-4CEA-45F0-815C-E998A75BBDC6", {"read", "notify"})
+
+			// Standard characteristic "ReadValue" method call
+			.onReadValue(CHARACTERISTIC_METHOD_CALLBACK_LAMBDA
+			{
+				const char *pTextString = self.getDataPointer<const char *>("wifi/ip_address", "");
+				self.methodReturnValue(pInvocation, pTextString, true);
+			})
+
+			// Here we use the onUpdatedValue to set a callback that isn't exposed to BlueZ, but rather allows us to manage
+			// updates to our value. These updates may have come from our own server or some other source.
+			//
+			// We can handle updates in any way we wish, but the most common use is to send a change notification.
+			.onUpdatedValue(CHARACTERISTIC_UPDATED_VALUE_CALLBACK_LAMBDA
+			{
+				const char *pTextString = self.getDataPointer<const char *>("wifi/ip_address", "");
+				self.sendChangeNotificationValue(pConnection, pTextString);
+				return true;
+			})
+
+			// GATT Descriptor: Characteristic User Description (0x2901)
+			.gattDescriptorBegin("description", "2901", {"read"})
+
+				// Standard descriptor "ReadValue" method call
+				.onReadValue(DESCRIPTOR_METHOD_CALLBACK_LAMBDA
+				{
+					const char *pDescription = "IP Address";
 					self.methodReturnValue(pInvocation, pDescription, true);
 				})
 
