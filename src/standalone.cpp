@@ -106,6 +106,15 @@
 #include <iostream>
 #include <thread>
 #include <sstream>
+#include <unistd.h>
+#include <string.h>
+#include <linux/wireless.h>
+
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #include "../include/Gobbledegook.h"
 
@@ -126,6 +135,10 @@ static uint8_t serverDataBatteryLevel = 78;
 // The wifi ssid ("wifi/ssid") used by our custom text string service (see Server.cpp)
 static std::string serverDataSSIDString = "Glassboard";
 
+
+// The wifi ssid ("wifi/connected_ssid") used by our custom text string service (see Server.cpp)
+static char serverDataConnectedSSIDString[128];
+
 // The wifi passphrse ("wifi/ssid") used by our custom text string service (see Server.cpp)
 static std::string serverDataPassphraseString;
 
@@ -144,8 +157,22 @@ enum LogLevel
 	ErrorsOnly
 };
 
+//
+// Wifi Information
+//
+typedef struct {
+    char mac[18];
+    char ssid[33];
+    int bitrate;
+    int level;
+} signalInfo;
+
 // Our log level - defaulted to 'Normal' but can be modified via command-line options
 LogLevel logLevel = Normal;
+
+// WiFi variables
+char const *wlan = "wlan0";
+signalInfo sigInfo;
 
 // Our full set of logging methods (we just log to stdout)
 //
@@ -178,6 +205,79 @@ void signalHandler(int signum)
 			break;
 	}
 }
+
+//
+// Get the WiFi signal information
+//
+int getSignalInfo(signalInfo *sigInfo, const char *iwname){
+    iwreq req;
+    strcpy(req.ifr_name, "wlan0");
+
+    iw_statistics *stats;
+
+    //have to use a socket for ioctl
+    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+
+    //make room for the iw_statistics object
+    req.u.data.pointer = (iw_statistics *)malloc(sizeof(iw_statistics));
+    req.u.data.length = sizeof(iw_statistics);
+
+    //this will gather the signal strength
+    if(ioctl(sockfd, SIOCGIWSTATS, &req) == -1){
+        //die with error, invalid interface
+        fprintf(stderr, "Invalid interface.\n");
+        return(-1);
+    }
+    else if(((iw_statistics *)req.u.data.pointer)->qual.updated & IW_QUAL_DBM){
+        //signal is measured in dBm and is valid for us to use
+        sigInfo->level=((iw_statistics *)req.u.data.pointer)->qual.level - 256;
+    }
+
+    //SIOCGIWESSID for ssid
+    char buffer[32];
+    memset(buffer, 0, 32);
+    req.u.essid.pointer = buffer;
+    req.u.essid.length = 32;
+    //this will gather the SSID of the connected network
+    if(ioctl(sockfd, SIOCGIWESSID, &req) == -1){
+        //die with error, invalid interface
+        return(-1);
+    }
+    else{
+        memcpy(&sigInfo->ssid, req.u.essid.pointer, req.u.essid.length);
+        memset(&sigInfo->ssid[req.u.essid.length],0,1);
+    }
+
+    //SIOCGIWRATE for bits/sec (convert to mbit)
+    int bitrate=-1;
+    //this will get the bitrate of the link
+    if(ioctl(sockfd, SIOCGIWRATE, &req) == -1){
+        fprintf(stderr, "bitratefail");
+        return(-1);
+    }else{
+        memcpy(&bitrate, &req.u.bitrate, sizeof(int));
+        sigInfo->bitrate=bitrate/1000000;
+    }
+
+
+    //SIOCGIFHWADDR for mac addr
+    ifreq req2;
+    strcpy(req2.ifr_name, iwname);
+    //this will get the mac address of the interface
+    if(ioctl(sockfd, SIOCGIFHWADDR, &req2) == -1){
+        fprintf(stderr, "mac error");
+        return(-1);
+    }
+    else{
+        sprintf(sigInfo->mac, "%.2X", (unsigned char)req2.ifr_hwaddr.sa_data[0]);
+        for(int s=1; s<6; s++){
+            sprintf(sigInfo->mac+strlen(sigInfo->mac), ":%.2X", (unsigned char)req2.ifr_hwaddr.sa_data[s]);
+        }
+    }
+    close(sockfd);
+	return 0;
+}
+
 
 //
 // Server data management
@@ -215,7 +315,37 @@ const void *dataGetter(const char *pName)
 	{
 		return &serverDataUpdate;
 	}
-    
+	else if (strName == "wifi/connected_ssid")
+	{
+		FILE *fp;
+		char path[1035];
+		fp = popen("iw wlan0 info | grep -Po '(?<=ssid ).*'", "r");
+		if (fp == NULL) {
+			printf("Failed to run command\n" );
+			exit(1);
+		}
+		fgets(serverDataConnectedSSIDString, sizeof(path)-1, fp);
+		pclose(fp);
+		printf("%x", serverDataConnectedSSIDString);
+		// sprintf(serverDataConnectedSSIDString, "%s", path);
+		return &serverDataConnectedSSIDString;
+		// getSignalInfo(&sigInfo, wlan);
+		// return &sigInfo.ssid;
+		// return serverDataSSIDString.c_str();
+	}
+	else if (strName == "wifi/ip_address")
+	{
+		int fd;
+		struct ifreq ifr;
+		fd = socket(AF_INET, SOCK_DGRAM, 0);
+		/* I want to get an IPv4 IP address */
+		ifr.ifr_addr.sa_family = AF_INET;
+		/* I want IP address attached to "wlan0" */
+		strncpy(ifr.ifr_name, "wlan0", IFNAMSIZ-1);
+		ioctl(fd, SIOCGIFADDR, &ifr);
+		close(fd);
+		return inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr);
+	}
 
 	LogWarn((std::string("Unknown name for server data getter request: '") + pName + "'").c_str());
 	return nullptr;
@@ -331,7 +461,7 @@ int main(int argc, char **ppArgv)
 	//     This first parameter (the service name) must match tha name configured in the D-Bus permissions. See the Readme.md file
 	//     for more information.
 	//
-	if (!ggkStart("gobbledegook", "Gobbledegook", "Gobbledegook", dataGetter, dataSetter, kMaxAsyncInitTimeoutMS))
+	if (!ggkStart("il", "Insects Limited Camera", "IL Camera", dataGetter, dataSetter, kMaxAsyncInitTimeoutMS))
 	{
 		return -1;
 	}
